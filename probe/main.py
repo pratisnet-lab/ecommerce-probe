@@ -9,7 +9,8 @@ from urllib.request import Request, urlopen
 from urllib.robotparser import RobotFileParser
 
 from probe.sites.catalog import SITES
-from probe.sites.extract import FIELDS, extract
+from probe.sites.extract import extract
+from probe.quality import evaluate
 
 ROOT = Path(__file__).resolve().parent
 USER_AGENT = "EcommerceProbe/0.1 (+research; respects robots.txt)"
@@ -65,14 +66,29 @@ def run(targets):
 
 def save(results, output):
     output.mkdir(parents=True, exist_ok=True)
-    (output / "products.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
-    lines = ["# Tablet Probe Report", "", f"Generated UTC: {datetime.now(timezone.utc).isoformat()}", "",
-             "| Site | URLs | Products | Field completeness | Errors |", "|---|---:|---:|---:|---:|"]
+    summary = evaluate(results)
+    (output / "products.json").write_text(
+        json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (output / "quality.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    lines = [
+        "# Tablet Probe Report", "",
+        f"Generated UTC: {datetime.now(timezone.utc).isoformat()}", "",
+        "**Note:** A successful workflow run does not imply successful product collection.", "",
+        "| Site | Status | URLs | Products | Completeness | Errors |",
+        "|---|---|---:|---:|---:|---:|",
+    ]
     for site in SITES:
-        info = results.get(site, {"products": [], "errors": [], "urls_checked": 0})
-        rows = info["products"]
-        completeness = sum(bool(p.get(k)) for p in rows for k in FIELDS) / (len(rows) * len(FIELDS)) * 100 if rows else 0
-        lines.append(f"| {site} | {info['urls_checked']} | {len(rows)} | {completeness:.1f}% | {len(info['errors'])} |")
+        row = summary.get(site, {})
+        score = row.get("field_completeness_percent")
+        display = "N/A" if score is None else f"{score:.1f}%"
+        lines.append(
+            f"| {site} | {row.get('status', 'unknown')} | "
+            f"{row.get('urls_checked', 0)} | {row.get('products', 0)} | "
+            f"{display} | {row.get('errors', 0)} |"
+        )
     report = output.parent / "reports" / "probe_report.md"
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -84,10 +100,15 @@ def main():
     parser.add_argument("--output", default="probe/output")
     args = parser.parse_args()
     targets = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    if not isinstance(targets, dict):
+        parser.error('Targets must be a JSON object')
     unknown = set(targets) - set(SITES)
     if unknown:
         parser.error(f"Unknown sites: {sorted(unknown)}")
-    save(run(targets), Path(args.output))
+    for site, urls in targets.items():
+        if not isinstance(urls, list) or any(not isinstance(url, str) for url in urls):
+            parser.error(f'Targets for {site} must be a list of URL strings')
+    save(run({site: targets.get(site, []) for site in SITES}), Path(args.output))
 
 
 if __name__ == "__main__":

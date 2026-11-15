@@ -22,4 +22,5 @@ jobs:
           name: tablet-probe
           path: |
             probe/output/products.json
+            probe/output/quality.json
             probe/reports/probe_report.md
