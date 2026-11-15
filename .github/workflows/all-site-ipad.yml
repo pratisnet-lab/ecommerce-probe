@@ -1,0 +1,27 @@
+name: All-site Apple iPad pilot
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'probe/all_site_ipad.py'
+      - '.github/workflows/all-site-ipad.yml'
+permissions:
+  contents: read
+jobs:
+  ipad:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run bounded 13-site Apple iPad test
+        run: python -m probe.all_site_ipad
+      - name: Upload raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-site-ipad-pilot
+          path: probe/output/all_site_ipad.json
