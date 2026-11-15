@@ -15,6 +15,7 @@ from urllib.parse import urlparse, parse_qs
 from probe.all_site_ipad import SEEDS, links_for, load_html, same_site
 from probe.sites.catalog import SITES
 from probe.sites.extract import extract
+from probe.storage import save_report
 
 CATEGORY_WORDS = ("tablet", "ipad", "tablets")
 CATEGORY_EXCLUDE = ("blog", "yardim", "help", "kampanya", "campaign", "magaza", "store", "search", "arama", "aksesuar", "accessories")
@@ -143,6 +144,8 @@ def main():
     output = Path("probe/output/full_ipad.json")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    database = save_report(report)
+    print(f"SQLite saved: {database}", flush=True)
     lines = ["## Apple iPad category crawl", "",
              "| Site | Category pages | Candidate URLs | Products | With price | Errors | Complete | Status |",
              "|---|---:|---:|---:|---:|---:|---|---|"]
