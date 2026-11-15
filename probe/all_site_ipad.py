@@ -6,6 +6,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 from urllib.robotparser import RobotFileParser
 
 from probe.connectivity import AGENT, check
@@ -45,15 +46,34 @@ def same_site(site, url):
     expected = urlparse(SITES[site]).hostname
     return bool(host and (host == expected or host.endswith("." + expected)))
 
+def robots_permission(site, url):
+    """Distinguish explicit disallow from robots fetch/parse failures."""
+    robots_url = f"https://{urlparse(url).hostname}/robots.txt"
+    try:
+        with urlopen(Request(robots_url, headers={"User-Agent": AGENT}), timeout=10) as response:
+            content = response.read(500_001)
+            if len(content) > 500_000:
+                return "robots_too_large"
+            lines = content.decode("utf-8", "replace").splitlines()
+        parser = RobotFileParser()
+        parser.parse(lines)
+        if not parser.can_fetch(AGENT, url):
+            return "robots_disallowed"
+        return "allowed"
+    except HTTPError as exc:
+        return f"robots_http_{exc.code}_unknown"
+    except (URLError, TimeoutError, OSError) as exc:
+        return f"robots_unavailable_{type(exc).__name__}"
+    except Exception as exc:
+        return f"robots_error_{type(exc).__name__}"
+
 def load_html(site, url):
     if not url.startswith("https://") or not same_site(site, url):
         return None, "invalid_url"
-    robot = RobotFileParser()
-    robot.set_url(f"https://{urlparse(url).hostname}/robots.txt")
+    permission = robots_permission(site, url)
+    if permission != "allowed":
+        return None, permission
     try:
-        robot.read()
-        if not robot.can_fetch(AGENT, url):
-            return None, "robots_blocked_or_unknown"
         with urlopen(Request(url, headers={"User-Agent": AGENT, "Accept": "text/html"}), timeout=10) as response:
             if not same_site(site, response.url):
                 return None, "redirect_outside_site"
@@ -63,6 +83,8 @@ def load_html(site, url):
             if len(html) > MAX_HTML:
                 return None, "too_large"
             return (html.decode("utf-8", "replace"), response.url), "html_accessible"
+    except HTTPError as exc:
+        return None, f"http_{exc.code}"
     except Exception as exc:
         return None, f"{type(exc).__name__}: {exc}"
 
