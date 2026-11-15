@@ -1,6 +1,11 @@
 name: Connectivity smoke test
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'probe/**'
+      - '.github/workflows/connectivity-smoke.yml'
 permissions:
   contents: read
 jobs:
@@ -14,6 +19,8 @@ jobs:
           python-version: '3.12'
       - name: Check 13 sites and at most 3 product URLs each
         run: python -m probe.connectivity
+      - name: Show site results in job summary
+        run: python -m probe.smoke_summary
       - name: Upload connectivity report
         uses: actions/upload-artifact@v4
         with:
