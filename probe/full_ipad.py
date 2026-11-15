@@ -39,7 +39,7 @@ def pagination_link(url, label, current):
     if any(key.lower() in ("page", "sayfa", "p", "pg", "pageindex") for key in query):
         return True
     text = label.strip().casefold()
-    return text.isdigit() or any(word in text for word in NEXT_WORDS)
+    return (text.isdigit() or any(word in text for word in NEXT_WORDS)) and parsed.path == urlparse(current).path
 
 def crawl_site(site, max_pages=80, max_requests=300, delay=1.0):
     seed = SEEDS.get(site, SITES[site])
@@ -86,11 +86,11 @@ def crawl_site(site, max_pages=80, max_requests=300, delay=1.0):
         for target, label in links:
             if product_link(target, label):
                 product_urls.add(target)
-            elif category_link(target, label):
-                if target not in visited and kind in ("home", "category"):
-                    queue.append((target, "category"))
             elif kind == "category" and pagination_link(target, label, final_url):
                 if target not in visited:
+                    queue.append((target, "category"))
+            elif category_link(target, label):
+                if target not in visited and kind in ("home", "category"):
                     queue.append((target, "category"))
         # Once a product is discovered, enqueue it for detail extraction.
         pending = {u for u, k in queue if k == "product"}
@@ -100,7 +100,7 @@ def crawl_site(site, max_pages=80, max_requests=300, delay=1.0):
     result["product_urls"] = sorted(product_urls)
     result["products"] = list(records.values())
     remaining = [u for u, _ in queue if u not in visited]
-    result["complete"] = bool(categories) and not remaining and not result["errors"]
+    result["complete"] = bool(categories) and bool(result["products"]) and not remaining and not result["errors"]
     if not categories:
         result["status"] = "category_not_verified"
     elif not result["products"]:
