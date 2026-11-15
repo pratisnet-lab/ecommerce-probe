@@ -91,7 +91,7 @@ def save(results, output):
         )
     report = output.parent / "reports" / "probe_report.md"
     report.parent.mkdir(parents=True, exist_ok=True)
-    report.write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+    report.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def main():
