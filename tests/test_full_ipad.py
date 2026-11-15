@@ -27,6 +27,8 @@ class FullIpadTests(unittest.TestCase):
         self.assertEqual(len(result["product_urls"]), 6)
         self.assertEqual(len(result["products"]), 6)
         self.assertTrue(result["complete"])
+        self.assertEqual(result["products_with_price"], 6)
+        self.assertEqual(result["error_count"], 0)
 
     def test_no_products_cannot_be_complete(self):
         with patch("probe.full_ipad.load_html", return_value=('<a href="/tablet">Tablet</a>', "https://www.amazon.com.tr")), patch("probe.full_ipad.time.sleep"):
