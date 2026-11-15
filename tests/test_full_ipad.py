@@ -28,6 +28,11 @@ class FullIpadTests(unittest.TestCase):
         self.assertEqual(len(result["products"]), 6)
         self.assertTrue(result["complete"])
 
+    def test_no_products_cannot_be_complete(self):
+        with patch("probe.full_ipad.load_html", return_value=('<a href="/tablet">Tablet</a>', "https://www.amazon.com.tr")), patch("probe.full_ipad.time.sleep"):
+            result = crawl_site("amazon", max_requests=4)
+        self.assertFalse(result["complete"])
+
     def test_budget_marks_incomplete(self):
         with patch("probe.full_ipad.load_html", return_value=('<a href="/tablet">Tablet</a>', "https://www.amazon.com.tr")), patch("probe.full_ipad.time.sleep"):
             result = crawl_site("amazon", max_requests=1)
