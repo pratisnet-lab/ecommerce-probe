@@ -1,0 +1,54 @@
+name: Full Apple iPad category crawl
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: 'Optional single site (blank = all 13)'
+        required: false
+        type: choice
+        options:
+          - all
+          - amazon
+          - trendyol
+          - hepsiburada
+          - n11
+          - teknosa
+          - mediamarkt
+          - vatan
+          - boyner
+          - beymen
+          - migros
+          - a101
+          - getir
+          - pazarama
+  push:
+    branches: [main]
+    paths:
+      - 'probe/full_ipad.py'
+      - '.github/workflows/full-ipad.yml'
+permissions:
+  contents: read
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run category-first discovery
+        env:
+          TARGET_SITE: ${{ inputs.site || 'all' }}
+        run: |
+          if [ "$TARGET_SITE" = "all" ]; then
+            python -m probe.full_ipad --max-pages 80 --max-requests 300
+          else
+            python -m probe.full_ipad --site "$TARGET_SITE" --max-pages 80 --max-requests 300
+          fi
+      - name: Upload detailed JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-ipad-crawl
+          path: probe/output/full_ipad.json
