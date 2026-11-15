@@ -51,4 +51,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: full-ipad-crawl
-          path: probe/output/full_ipad.json
+          path: |
+            probe/output/full_ipad.json
+            probe/output/products.sqlite
