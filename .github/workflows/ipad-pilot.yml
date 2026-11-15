@@ -1,0 +1,27 @@
+name: Apple iPad discovery pilot
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'probe/ipad_pilot.py'
+      - 'probe/discovery.py'
+      - '.github/workflows/ipad-pilot.yml'
+permissions:
+  contents: read
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Discover iPad links and test up to 3 products
+        run: python -m probe.ipad_pilot
+      - name: Upload pilot result
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipad-pilot
+          path: probe/output/ipad_pilot.json
