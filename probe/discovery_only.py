@@ -39,11 +39,14 @@ def is_next_page(url, label, current):
 def discover(site, max_pages=60, delay=1.0):
     seed = SEEDS.get(site, SITES[site])
     queue = deque([(seed, 0, "seed")])
+    queued = {seed}
     seen = set()
     categories = set()
     products = set()
     failures = []
     homepage_accessible = False
+    seed_status = "not_checked"
+    page_statuses = {}
     while queue and len(seen) < max_pages:
         url, depth, kind = queue.popleft()
         if url in seen or not same_site(site, url):
@@ -52,6 +55,9 @@ def discover(site, max_pages=60, delay=1.0):
         if len(seen) > 1:
             time.sleep(delay)
         page, status = load_html(site, url)
+        page_statuses[url] = status
+        if kind == "seed":
+            seed_status = status
         if not page:
             failures.append({"url": url, "reason": status})
             continue
@@ -64,18 +70,23 @@ def discover(site, max_pages=60, delay=1.0):
         for link, label in links_for(site, html, final):
             if is_ipad(link, label):
                 products.add(link)
-            elif kind != "seed" or site in SEEDS:
-                if is_next_page(link, label, final) and link not in seen:
-                    queue.append((link, depth, "category"))
-            if is_tablet_category(link, label) and depth < 3 and category_count < 12:
+            elif (kind == "category" or (kind == "seed" and site in SEEDS)) and is_next_page(link, label, final):
+                if link not in seen and link not in queued:
+                    queue.appendleft((link, depth, "category"))
+                    queued.add(link)
+            elif (is_tablet_category(link, label) and depth < 3 and
+                  category_count < 12 and link not in seen and link not in queued):
                 queue.append((link, depth + 1, "category"))
+                queued.add(link)
                 category_count += 1
     truncated = bool(queue)
     return {
         "site": site, "seed": seed, "seed_accessible": homepage_accessible,
+        "seed_status": seed_status, "page_statuses": page_statuses,
         "tablet_categories": sorted(categories), "ipad_urls": sorted(products),
         "ipad_count": len(products), "pages_checked": len(seen),
         "truncated": truncated, "failures": failures,
+        "discovery_verified": bool(categories and products),
         "status": ("blocked_or_unreachable" if not homepage_accessible else
                    "category_not_found" if not categories else
                    "ipad_links_found" if products else "no_ipad_links_found"),
