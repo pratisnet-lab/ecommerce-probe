@@ -17,15 +17,18 @@ from probe.sites.catalog import SITES
 from probe.sites.extract import extract
 
 CATEGORY_WORDS = ("tablet", "ipad", "tablets")
+CATEGORY_EXCLUDE = ("blog", "yardim", "help", "kampanya", "campaign", "magaza", "store", "search", "arama", "aksesuar", "accessories")
 NEXT_WORDS = ("next", "sonraki", "ileri", "devam", "›", "»")
-PRODUCT_PATHS = ("/p-", "-p-", "/urun/", "/product/", "/p/", "/dp/", ".html", ".htm")
+PRODUCT_PATHS = ("/p-", "-p-", "/urun/", "/product/", "/p/", "/dp/", "-pm-", "-pd-", "/prd/", ".html", ".htm")
 
 def ipad(text):
     return "ipad" in str(text).casefold()
 
 def category_link(url, label):
     value = (url + " " + label).casefold()
-    return any(w in value for w in CATEGORY_WORDS) and not product_link(url, label)
+    return (any(w in value for w in CATEGORY_WORDS) and
+            not any(w in value for w in CATEGORY_EXCLUDE) and
+            not product_link(url, label))
 
 def product_link(url, label):
     path = urlparse(url).path.casefold()
@@ -48,13 +51,15 @@ def crawl_site(site, max_pages=80, max_requests=300, delay=1.0):
         "product_urls": [], "products": [], "errors": [], "requests": 0,
         "status": "not_started", "complete": False,
     }
-    queue = deque([(seed, "category" if site in SEEDS else "home")])
+    queue = deque([(seed, "category" if site in SEEDS else "home", 0)])
+    max_category_depth = 3
+    max_categories_per_page = 12
     visited = set()
     product_urls = set()
     categories = set()
     records = {}
     while queue and result["requests"] < max_requests:
-        url, kind = queue.popleft()
+        url, kind, depth = queue.popleft()
         if url in visited or not same_site(site, url):
             continue
         if kind != "product" and result["category_pages"] >= max_pages:
@@ -83,23 +88,29 @@ def crawl_site(site, max_pages=80, max_requests=300, delay=1.0):
             for item in extract(html, site, final_url):
                 if ipad(item.get("title")) and item.get("title"):
                     records[item.get("url") or final_url] = item
+        category_count = 0
         for target, label in links:
             if product_link(target, label):
                 product_urls.add(target)
             elif kind == "category" and pagination_link(target, label, final_url):
                 if target not in visited:
-                    queue.append((target, "category"))
+                    queue.append((target, "category", depth))
             elif category_link(target, label):
-                if target not in visited and kind in ("home", "category"):
-                    queue.append((target, "category"))
+                if (target not in visited and depth < max_category_depth and
+                        category_count < max_categories_per_page):
+                    queue.append((target, "category", depth + 1))
+                    category_count += 1
         # Once a product is discovered, enqueue it for detail extraction.
-        pending = {u for u, k in queue if k == "product"}
+        pending = {u for u, k, _ in queue if k == "product"}
         for target in sorted(product_urls - visited - pending):
-            queue.append((target, "product"))
+            queue.appendleft((target, "product", depth))
     result["categories"] = sorted(categories)
     result["product_urls"] = sorted(product_urls)
     result["products"] = list(records.values())
-    remaining = [u for u, _ in queue if u not in visited]
+    result["products_with_price"] = sum(bool(p.get("title")) and p.get("price") is not None for p in records.values())
+    result["unextracted_product_urls"] = sorted(product_urls - set(visited))
+    result["error_count"] = len(result["errors"])
+    remaining = [u for u, _, _ in queue if u not in visited]
     result["complete"] = bool(categories) and bool(result["products"]) and not remaining and not result["errors"]
     if not categories:
         result["status"] = "category_not_verified"
@@ -111,6 +122,7 @@ def crawl_site(site, max_pages=80, max_requests=300, delay=1.0):
         result["status"] = "completed"
     if remaining:
         result["errors"].append(f"request_or_page_budget_remaining={len(remaining)}")
+    result["error_count"] = len(result["errors"])
     return result
 
 def main():
@@ -132,10 +144,10 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     lines = ["## Apple iPad category crawl", "",
-             "| Site | Category pages | Candidate URLs | Products | Complete | Status |",
-             "|---|---:|---:|---:|---|---|"]
+             "| Site | Category pages | Candidate URLs | Products | With price | Errors | Complete | Status |",
+             "|---|---:|---:|---:|---:|---:|---|---|"]
     for site, item in report["sites"].items():
-        lines.append(f"| {site} | {item['category_pages']} | {len(item['product_urls'])} | {len(item['products'])} | {item['complete']} | {item['status']} |")
+        lines.append(f"| {site} | {item['category_pages']} | {len(item['product_urls'])} | {len(item['products'])} | {item['products_with_price']} | {item['error_count']} | {item['complete']} | {item['status']} |")
     summary = "\n".join(lines) + "\n"
     print(summary)
     if os.getenv("GITHUB_STEP_SUMMARY"):
